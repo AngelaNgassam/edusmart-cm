@@ -1,6 +1,11 @@
 # EDUSMART-CM
 
-Projet académique — Module [Administration - Enseignant]
+Projet académique - Module [Administration - Enseignant]
+
+3 collaborateurs :
+NGASSAM Angela
+Metangmo Bersaine
+Takam Manuel
 
 ## Structure
 - `backend/` — API Laravel
@@ -22,5 +27,5 @@ php artisan serve
 bash
 cd frontend
 npm install
-npm run dev
+npm start
 
