@@ -1,0 +1,153 @@
+name: CD — Build, Push & Deploy
+
+on:
+  push:
+    branches:
+      - main      # → production
+      - staging   # → staging
+
+env:
+  DOCKER_BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/edusmart-backend
+  DOCKER_FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/edusmart-frontend
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 : Build & Push images Docker Hub
+  # ─────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "env=production" >> $GITHUB_OUTPUT
+          else
+            echo "tag=staging" >> $GITHUB_OUTPUT
+            echo "env=staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Backend ──────────────────────────────
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Frontend ─────────────────────────────
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=${{ github.ref_name == 'main' && secrets.PROD_VITE_API_URL || secrets.STAGING_VITE_API_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────
+  # JOB 2 : Deploy sur le serveur via SSH
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to ${{ github.ref_name == 'main' && 'Production' || 'Staging' }}
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+
+    steps:
+      - name: Checkout code (pour docker-compose.yml)
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.PROD_SSH_HOST || secrets.STAGING_SSH_HOST }}
+          username: ${{ github.ref_name == 'main' && secrets.PROD_SSH_USER || secrets.STAGING_SSH_USER }}
+          key: ${{ github.ref_name == 'main' && secrets.PROD_SSH_KEY || secrets.STAGING_SSH_KEY }}
+          port: ${{ github.ref_name == 'main' && secrets.PROD_SSH_PORT || secrets.STAGING_SSH_PORT || 22 }}
+          source: "docker-compose.yml"
+          target: ${{ github.ref_name == 'main' && secrets.PROD_APP_PATH || secrets.STAGING_APP_PATH }}
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.PROD_SSH_HOST || secrets.STAGING_SSH_HOST }}
+          username: ${{ github.ref_name == 'main' && secrets.PROD_SSH_USER || secrets.STAGING_SSH_USER }}
+          key: ${{ github.ref_name == 'main' && secrets.PROD_SSH_KEY || secrets.STAGING_SSH_KEY }}
+          port: ${{ github.ref_name == 'main' && secrets.PROD_SSH_PORT || secrets.STAGING_SSH_PORT || 22 }}
+          envs: DOCKERHUB_USERNAME,IMAGE_TAG
+          script: |
+            set -e
+
+            APP_PATH="${{ github.ref_name == 'main' && secrets.PROD_APP_PATH || secrets.STAGING_APP_PATH }}"
+            IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+            DOCKER_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+
+            cd $APP_PATH
+
+            echo "→ Login Docker Hub"
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+            echo "→ Pull nouvelles images"
+            docker pull $DOCKER_USERNAME/edusmart-backend:$IMAGE_TAG
+            docker pull $DOCKER_USERNAME/edusmart-frontend:$IMAGE_TAG
+
+            echo "→ Mise à jour des variables d'environnement"
+            cat > .env << 'ENVEOF'
+            APP_KEY=${{ github.ref_name == 'main' && secrets.PROD_APP_KEY || secrets.STAGING_APP_KEY }}
+            APP_URL=${{ github.ref_name == 'main' && secrets.PROD_APP_URL || secrets.STAGING_APP_URL }}
+            FRONTEND_URL=${{ github.ref_name == 'main' && secrets.PROD_FRONTEND_URL || secrets.STAGING_FRONTEND_URL }}
+            VITE_API_URL=${{ github.ref_name == 'main' && secrets.PROD_VITE_API_URL || secrets.STAGING_VITE_API_URL }}
+            DB_DATABASE=${{ github.ref_name == 'main' && secrets.PROD_DB_DATABASE || secrets.STAGING_DB_DATABASE }}
+            DB_USERNAME=${{ github.ref_name == 'main' && secrets.PROD_DB_USERNAME || secrets.STAGING_DB_USERNAME }}
+            DB_PASSWORD=${{ github.ref_name == 'main' && secrets.PROD_DB_PASSWORD || secrets.STAGING_DB_PASSWORD }}
+            DB_ROOT_PASSWORD=${{ github.ref_name == 'main' && secrets.PROD_DB_ROOT_PASSWORD || secrets.STAGING_DB_ROOT_PASSWORD }}
+            ENVEOF
+
+            echo "→ Redémarrage des containers"
+            BACKEND_IMAGE=$DOCKER_USERNAME/edusmart-backend:$IMAGE_TAG \
+            FRONTEND_IMAGE=$DOCKER_USERNAME/edusmart-frontend:$IMAGE_TAG \
+            docker compose up -d --no-build
+
+            echo "→ Migrations Laravel"
+            docker compose exec -T backend php artisan migrate --force
+
+            echo "→ Cache Laravel"
+            docker compose exec -T backend php artisan config:cache
+            docker compose exec -T backend php artisan route:cache
+            docker compose exec -T backend php artisan view:cache
+
+            echo "→ Nettoyage images obsolètes"
+            docker image prune -f
+
+            echo "✅ Déploiement terminé"
