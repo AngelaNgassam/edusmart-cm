@@ -6,12 +6,7 @@ FROM composer:2.7 AS vendor
 WORKDIR /app
 
 COPY composer.json composer.lock ./
-RUN mkdir -p bootstrap/cache \
-        storage/framework/sessions \
-        storage/framework/views \
-        storage/framework/cache \
-        storage/logs \
-    && composer install \
+RUN composer install \
         --no-interaction \
         --no-dev \
         --prefer-dist \
