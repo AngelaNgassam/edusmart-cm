@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────
 FROM php:8.3-cli-alpine AS vendor
 
-RUN apk add --no-cache git unzip \
+RUN apk add --no-cache git unzip libzip-dev \
     && docker-php-ext-install zip
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
