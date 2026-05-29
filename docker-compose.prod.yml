@@ -1,18 +1,19 @@
-version: "3.9"
+# Production : images pré-construites depuis Docker Hub (pas de build local)
+# Usage sur le serveur :
+#   BACKEND_IMAGE=user/edusmart-backend:latest \
+#   FRONTEND_IMAGE=user/edusmart-frontend:latest \
+#   docker compose -f docker-compose.prod.yml up -d
 
 services:
-  # ─── Backend Laravel ───────────────────────
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE}
     container_name: edusmart_backend
     restart: unless-stopped
     ports:
       - "8000:80"
     environment:
-      APP_ENV: ${APP_ENV:-local}
-      APP_DEBUG: ${APP_DEBUG:-true}
+      APP_ENV: production
+      APP_DEBUG: "false"
       APP_KEY: ${APP_KEY}
       APP_URL: ${APP_URL:-http://localhost:8000}
       DB_CONNECTION: mysql
@@ -33,13 +34,8 @@ services:
     networks:
       - edusmart_net
 
-  # ─── Frontend React ────────────────────────
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE}
     container_name: edusmart_frontend
     restart: unless-stopped
     ports:
@@ -49,7 +45,6 @@ services:
     networks:
       - edusmart_net
 
-  # ─── MySQL ─────────────────────────────────
   db:
     image: mysql:8.0
     container_name: edusmart_db
@@ -61,8 +56,6 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD}"]
       interval: 10s

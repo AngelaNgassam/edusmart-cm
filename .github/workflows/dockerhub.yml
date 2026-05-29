@@ -1,0 +1,73 @@
+# Publication automatique des images sur Docker Hub
+# Déclenché à chaque push sur main (prod) ou staging
+
+name: Docker Hub — Build & Push
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+
+env:
+  DOCKER_BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/edusmart-backend
+  DOCKER_FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/edusmart-frontend
+
+jobs:
+  publish:
+    name: Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=${{ github.ref_name == 'main' && secrets.PROD_VITE_API_URL || secrets.STAGING_VITE_API_URL || 'http://localhost:8000/api' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "Images publiées :"
+          echo "  ${{ env.DOCKER_BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}"
+          echo "  ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}"
