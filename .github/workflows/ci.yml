@@ -51,7 +51,7 @@ jobs:
           restore-keys: composer-
 
       - name: Create required directories
-        run: mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/logs
+        run: mkdir -p bootstrap/cache storage/framework/sessions storage/framework/views storage/framework/cache storage/logs
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader

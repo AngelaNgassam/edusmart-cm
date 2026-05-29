@@ -6,7 +6,11 @@ FROM composer:2.7 AS vendor
 WORKDIR /app
 
 COPY composer.json composer.lock ./
-RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/logs \
+RUN mkdir -p bootstrap/cache \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/framework/cache \
+        storage/logs \
     && composer install \
         --no-interaction \
         --no-dev \
@@ -53,7 +57,11 @@ COPY --from=vendor /app/vendor ./vendor
 COPY . .
 
 # Créer les dossiers requis par Laravel et fixer les permissions
-RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/logs \
+RUN mkdir -p bootstrap/cache \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/framework/cache \
+        storage/logs \
     && chown -R www-data:www-data /var/www/html \
     && chmod -R 775 storage bootstrap/cache
 
