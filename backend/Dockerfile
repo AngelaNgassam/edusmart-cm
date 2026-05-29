@@ -1,7 +1,14 @@
 # ─────────────────────────────────────────────
-# Stage 1 : dependencies
+# Stage 1 : dependencies (PHP 8.3 = platform du composer.lock)
 # ─────────────────────────────────────────────
-FROM composer:2.7 AS vendor
+FROM php:8.3-cli-alpine AS vendor
+
+RUN apk add --no-cache git unzip \
+    && docker-php-ext-install zip
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
 WORKDIR /app
 
