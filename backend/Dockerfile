@@ -16,7 +16,7 @@ RUN composer install \
 # ─────────────────────────────────────────────
 # Stage 2 : production image
 # ─────────────────────────────────────────────
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # Extensions PHP nécessaires
 RUN apk add --no-cache \
