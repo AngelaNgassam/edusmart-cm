@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────
-# Stage 1 : dependencies (PHP 8.3 = platform du composer.lock)
+# Stage 1 : dependencies (Symfony 8 du lock exige PHP >= 8.4)
 # ─────────────────────────────────────────────
-FROM php:8.3-cli-alpine AS vendor
+FROM php:8.4-cli-alpine AS vendor
 
 RUN apk add --no-cache git unzip libzip-dev \
     && docker-php-ext-install zip
@@ -23,7 +23,7 @@ RUN composer install \
 # ─────────────────────────────────────────────
 # Stage 2 : production image
 # ─────────────────────────────────────────────
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # Extensions PHP nécessaires
 RUN apk add --no-cache \
